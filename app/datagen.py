@@ -149,7 +149,9 @@ class World:
 
     def build_tenant(self, t):
         tid = t["tenant_id"]
-        self.tenants.append((tid, t["name"], json.dumps({"integrations": t["integrations"]})))
+        # Sources rolled out to under 70% of customers: known from onboarding, not inferred.
+        partial = [s for s in ("product", "zendesk", "stripe") if t[f"{s}_coverage"] < 0.7]
+        self.tenants.append((tid, t["name"], json.dumps({"integrations": t["integrations"], "partial_sources": partial})))
         n_csms = max(2, round(t["csms"] * self.scale))
         csms = []
         for i in range(n_csms):

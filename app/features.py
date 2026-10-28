@@ -97,7 +97,20 @@ def active_accounts(accounts, ev_visible, as_of):
     return started[~started.index.isin(lost)]
 
 
-def build_features(events: pd.DataFrame, accounts: pd.DataFrame, as_of, gmail_enabled=True) -> pd.DataFrame:
+def corroboration_required(tenant_config: dict) -> int:
+    """How many non-product sources an account without usage data needs.
+
+    Two normally. One if the organisation's own setup means fewer sources
+    exist: a source never connected, or rolled out to only part of the base.
+    Otherwise accounts are blind spots because of how the customer is set
+    up, not because of anything about the account.
+    """
+    missing_by_design = (not all(tenant_config["integrations"].values())) or bool(tenant_config.get("partial_sources"))
+    return 1 if missing_by_design else 2
+
+
+def build_features(events: pd.DataFrame, accounts: pd.DataFrame, as_of, gmail_enabled=True,
+                   min_corroboration=2) -> pd.DataFrame:
     as_of = pd.Timestamp(as_of)
     ev = visible(events, as_of)
     acc = active_accounts(accounts, ev, as_of)
@@ -167,16 +180,16 @@ def build_features(events: pd.DataFrame, accounts: pd.DataFrame, as_of, gmail_en
     for s in SIGNAL_SOURCES:
         out[f"n_{s}_180d"] = count(recent[recent["source"] == s]).astype(int)
     out["csm_id"] = acc["csm_id"]
-    out["blind_spot"] = [is_blind_spot(r) for _, r in out.iterrows()]
+    out["blind_spot"] = [is_blind_spot(r, min_corroboration) for _, r in out.iterrows()]
     return out
 
 
-def is_blind_spot(row) -> bool:
+def is_blind_spot(row, min_corroboration=2) -> bool:
     """Too little data to rank fairly with the rest.
 
     Usage is the main signal. With no usage history at all, we need recent
-    evidence from at least two other sources before trusting the score.
+    evidence from other sources (see corroboration_required) before trusting the score.
     """
     if not np.isnan(row["usage_30d"]):
         return False
-    return sum(row[f"n_{s}_180d"] > 0 for s in ("zendesk", "stripe", "gmail")) < 2
+    return sum(row[f"n_{s}_180d"] > 0 for s in ("zendesk", "stripe", "gmail")) < min_corroboration

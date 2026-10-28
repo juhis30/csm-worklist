@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 
-from app.features import build_features, is_blind_spot, next_renewal
+from app.features import build_features, corroboration_required, is_blind_spot, next_renewal
 
 AS_OF = pd.Timestamp("2026-06-01T06:00:00Z")
 
@@ -88,3 +88,12 @@ def test_blind_spot_rule():
     assert is_blind_spot(row)
     assert not is_blind_spot({**row, "n_gmail_180d": 2})       # two corroborating sources
     assert not is_blind_spot({**row, "usage_30d": 0.0})        # usage history exists, even if quiet now
+    assert not is_blind_spot(row, min_corroboration=1)         # org with a source missing by design
+    assert is_blind_spot({**row, "n_zendesk_180d": 0}, min_corroboration=1)   # no evidence at all
+
+
+def test_corroboration_relaxed_only_when_a_source_is_missing_by_design():
+    full = {"salesforce": True, "zendesk": True, "product": True, "stripe": True, "gmail": True}
+    assert corroboration_required({"integrations": full, "partial_sources": []}) == 2
+    assert corroboration_required({"integrations": {**full, "gmail": False}, "partial_sources": []}) == 1
+    assert corroboration_required({"integrations": full, "partial_sources": ["product"]}) == 1
