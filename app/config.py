@@ -20,3 +20,4 @@ BOOTSTRAP_WEEKS_BEHIND = 3
 
 # Shared secret between the scheduler (GitHub Actions) and the app.
 AGENT_TOKEN = os.environ.get("WORKLIST_AGENT_TOKEN", "dev-token")
+SESSION_SECRET = os.environ.get("WORKLIST_SESSION_SECRET", "dev-session-secret")

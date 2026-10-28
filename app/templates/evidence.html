@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block content %}
+<p class="small"><a href="/accounts/{{ a.account_id }}?score_id={{ s.score_id }}">← {{ a.name }}, score #{{ s.score_id }}</a></p>
+<h1>{{ f.label }}</h1>
+<div class="sub">
+  Value used in the score: <b>{{ 'no data' if value is none else f.fmt.format(value) }}</b>.
+  Source: {{ f.source }} ({{ f.event_types | join(", ") }}){% if f.window_days %}, window {{ start[:10] }} → {{ end[:10] }}{% endif %}.
+  Only events that had <b>reached us</b> by {{ s.as_of }} count, which is exactly what the system knew when it scored.
+</div>
+
+<h2>Events the score used ({{ used | length }}{% if used | length == 300 %}+{% endif %})</h2>
+<div class="scroll"><table>
+  <tr><th>Happened (UTC)</th><th>Reached us</th><th>Type</th><th>Value / detail</th><th>Payload as the source sent it</th></tr>
+  {% for e in used %}
+  <tr><td>{{ e.occurred_at }}</td><td class="small">{{ e.ingested_at }}</td><td>{{ e.event_type }}</td>
+    <td class="small">{{ e.value if e.value is not none else '' }} {{ e.actor or '' }} {{ e.ref or '' }}</td>
+    <td><details><summary class="small">{{ e.source }} #{{ e.raw_id }}</summary><pre>{{ e.payload }}</pre></details></td></tr>
+  {% endfor %}
+</table></div>
+
+<h2>In the window, but reached us after scoring ({{ late | length }})</h2>
+<p class="muted small">Late data. Not known at {{ s.as_of }}, so not in this score. The next run includes it.</p>
+{% if late %}<div class="scroll"><table>
+  <tr><th>Happened</th><th>Reached us</th><th>Type</th></tr>
+  {% for e in late %}<tr><td>{{ e.occurred_at }}</td><td>{{ e.ingested_at }}</td><td>{{ e.event_type }}</td></tr>{% endfor %}
+</table></div>{% endif %}
+{% endblock %}

@@ -66,6 +66,9 @@ CREATE TABLE IF NOT EXISTS events (
     PRIMARY KEY (tenant_id, source, source_event_id)   -- a re-delivery can't insert twice
 );
 CREATE INDEX IF NOT EXISTS ix_events_account ON events (tenant_id, account_id, occurred_at);
+-- Raw -> clean lookups (data health, evidence payloads). Without it, matching
+-- every raw event to its clean row is a full scan per row.
+CREATE INDEX IF NOT EXISTS ix_events_raw ON events (raw_id);
 
 -- Layer 3: what we threw away, and why. Nothing disappears silently.
 CREATE TABLE IF NOT EXISTS rejected_events (

@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}Agent runs · CSM Worklist{% endblock %}
+{% block content %}
+<h1>Agent runs</h1>
+<div class="sub">The agent runs on a schedule, with nobody pressing a button: ingest → data health → retrain if due → score →
+  compare with last week → tasks. Clock: <b>{{ clock }}</b> (simulated; each scheduled run advances one week until the data runs out).</div>
+{% for r in runs %}
+<div class="card" id="run-{{ r.run_id }}">
+  <b>Run #{{ r.run_id }}</b> · week of {{ r.as_of[:10] }} · <b class="{{ 'up' if r.status == 'failed' else '' }}">{{ r.status }}</b> ·
+  trigger: {{ r.trigger }} · started {{ r.started_at }}{% if r.finished_at %}, finished {{ r.finished_at }}{% endif %}
+  <div class="scroll"><table class="small" style="margin-top:8px">
+    {% for step in r.log | fromjson %}
+    <tr><td style="width:110px"><b>{{ step.step }}</b></td>
+      <td>{% for k, v in step.items() if k not in ('step', 'at', 'trace') %}<span style="margin-right:12px">{{ k }}: <code>{{ v }}</code></span>{% endfor %}
+        {% if step.trace %}<details><summary>trace</summary><pre>{{ step.trace }}</pre></details>{% endif %}</td></tr>
+    {% endfor %}
+  </table></div>
+</div>
+{% endfor %}
+{% endblock %}

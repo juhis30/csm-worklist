@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+{% block title %}{{ a.name }} · CSM Worklist{% endblock %}
+{% block content %}
+<h1>{{ a.name }} {% if s and s.blind_spot %}<span class="badge">blind spot</span>{% endif %}</h1>
+<div class="sub">{{ a.account_id }} · {{ a.segment }} · {{ a.seats }} seats · CSM {{ a.csm_name or 'unassigned' }} ·
+  contact {{ a.contact_name or '-' }} {% if a.contact_email %}&lt;{{ a.contact_email }}&gt;{% else %}<b>(no contact on file)</b>{% endif %}</div>
+
+{% if not s %}<p>Not scored: this account isn't an active customer at the latest run (lost, or not started yet).</p>{% else %}
+{% set rows = explain(s, params) %}
+{% set feats = s.features | fromjson %}
+<div class="stats">
+  <div class="stat"><div class="muted small">Chance of losing the next renewal</div><div class="v">{{ s.p_lost | pct }}</div>
+    <div class="muted small">typical account: {{ params.base_rate | pct }}</div></div>
+  <div class="stat"><div class="muted small">ARR (Salesforce)</div><div class="v">{{ s.arr | money }}</div></div>
+  <div class="stat"><div class="muted small">Expected ARR at risk</div><div class="v">{{ s.arr_at_risk | money }}</div></div>
+  <div class="stat"><div class="muted small">Next renewal</div><div class="v">{{ s.renewal_date }}</div></div>
+  <div class="stat"><div class="muted small">Active users, 30 days</div><div class="v">{{ '-' if feats.active_users_30d is none else feats.active_users_30d | int }}</div>
+    <div class="muted small">context only, not a model input</div></div>
+</div>
+{% if s.blind_spot %}
+<div class="banner warn"><b>Blind spot.</b> No product usage data and too little from other sources, so this probability rests mostly
+  on typical values rather than on this account. Treat it as unknown, not safe.</div>
+{% endif %}
+
+<h2>Why this score</h2>
+<div class="stats">
+  <div class="card" style="flex:1; min-width:260px; margin:0"><h3 style="margin-top:0">Raising the risk</h3>
+    <ul class="reasons">{% for r in reasons(s, params, 3) %}
+      <li>{{ r.label }}: <b>{{ r.value }}</b>{% if r.typical %} <span class="muted">(typical {{ r.typical }})</span>{% endif %}</li>
+    {% else %}<li class="muted">Nothing notable.</li>{% endfor %}</ul></div>
+  <div class="card" style="flex:1; min-width:260px; margin:0"><h3 style="margin-top:0">In their favour</h3>
+    <ul class="reasons">{% for r in reasons(s, params, 3, -1) %}
+      <li>{{ r.label }}: <b>{{ r.value }}</b>{% if r.typical %} <span class="muted">(typical {{ r.typical }})</span>{% endif %}</li>
+    {% else %}<li class="muted">Nothing notable.</li>{% endfor %}</ul></div>
+</div>
+
+<h3>The full calculation</h3>
+<div class="card small">
+  Score #{{ s.score_id }}, as of <b>{{ s.as_of }}</b>, agent run <a href="/runs#run-{{ s.run_id }}">#{{ s.run_id }}</a>,
+  model <a href="/model#{{ s.model_id }}"><code>{{ s.model_id }}</code></a>.<br>
+  Starting point (intercept) <b>{{ '%.3f' % params.intercept }}</b> + sum of contributions below
+  <b>{{ '%+.3f' % (logit - params.intercept) }}</b> = <b>{{ '%.3f' % logit }}</b> log-odds
+  → 1 / (1 + e<sup>−({{ '%.3f' % logit }})</sup>) = <b>{{ '%.1f' % (s.p_lost * 100) }}%</b>.<br>
+  Each contribution = the model's weight × how far this account's value is from the average account. Positive raises risk.
+</div>
+<div class="scroll"><table>
+  <tr><th>Input</th><th>This account</th><th>Typical</th><th class="num">Contribution</th><th></th><th>Evidence</th></tr>
+  {% for r in rows %}
+  <tr>
+    <td>{{ r.label }} <span class="muted small">({{ r.source }})</span></td>
+    <td>{{ r.value }}</td>
+    <td class="muted">{{ r.typical or '' }}</td>
+    <td class="num {{ 'up' if r.contrib > 0 else 'down' }}">{{ '%+.3f' % r.contrib }}</td>
+    <td><div class="bar"><span style="{% if r.contrib > 0 %}left:50%; width:{{ [r.contrib * 100, 50] | min }}%; background:var(--up){% else %}right:50%; width:{{ [-r.contrib * 100, 50] | min }}%; background:var(--down){% endif %}"></span></div></td>
+    <td>{% if r.has_evidence %}<a href="/accounts/{{ a.account_id }}/evidence?feature={{ r.feature }}&score_id={{ s.score_id }}">raw events →</a>{% else %}<span class="muted small">from Salesforce</span>{% endif %}</td>
+  </tr>
+  {% endfor %}
+</table></div>
+{% endif %}
+
+<h2>Agent tasks</h2>
+{% if not tasks %}<p class="muted">None.</p>{% endif %}
+{% for t in tasks %}
+<div class="card small"><b>{{ t.kind.replace('_', ' ') }}</b> · {{ t.created_at[:10] }} · <b>{{ t.status }}</b>{% if t.resolved_by %} by {{ t.resolved_by }} on {{ t.resolved_at[:10] }}{% endif %}
+  · triggered by <a href="?score_id={{ t.score_id }}">score #{{ t.score_id }}</a><br>{{ t.reason }}
+  {% if t.status == 'open' and (user.role == 'leader' or user.id == t.csm_id) %}
+    {% if t.draft_to %}
+    <details><summary>Review the drafted email to {{ t.draft_to }}</summary>
+      <form method="post" action="/tasks/{{ t.task_id }}/send" style="margin-top:8px">
+        <input name="subject" value="{{ t.draft_subject }}" style="width:100%; margin-bottom:6px" aria-label="Subject">
+        <textarea name="body" rows="8" aria-label="Body">{{ t.draft_body.replace('{csm}', user.name) }}</textarea>
+        <div style="margin-top:6px; display:flex; gap:8px"><button class="primary">Approve &amp; send</button>
+          <button formaction="/tasks/{{ t.task_id }}/dismiss">Dismiss</button></div>
+      </form></details>
+    {% else %}<form method="post" action="/tasks/{{ t.task_id }}/dismiss"><button>Mark handled</button></form>{% endif %}
+  {% endif %}
+</div>
+{% endfor %}
+{% for o in sent %}
+<div class="card small">✉ Sent to {{ o.to_email }} by {{ o.sent_by }} on {{ o.sent_at[:16] }}: <b>{{ o.subject }}</b>
+  <span class="muted">(demo outbox: recorded, not delivered)</span></div>
+{% endfor %}
+
+<h2>Score history</h2>
+<div class="scroll"><table>
+  <tr><th>As of</th><th class="num">Chance lost</th><th class="num">At risk</th><th>Model</th><th></th></tr>
+  {% for h in history %}
+  <tr><td>{{ h.as_of[:10] }}</td><td class="num">{{ h.p_lost | pct }}</td><td class="num">{{ h.arr_at_risk | money }}</td>
+    <td class="small"><code>{{ h.model_id }}</code></td>
+    <td>{% if s and h.score_id == s.score_id %}<b>showing</b>{% else %}<a href="?score_id={{ h.score_id }}">view</a>{% endif %}</td></tr>
+  {% endfor %}
+</table></div>
+
+<h2>Data we hold</h2>
+<div class="scroll"><table>
+  <tr><th>Source</th><th class="num">Events</th><th>Latest</th></tr>
+  {% for c in sources %}<tr><td>{{ c.source }}</td><td class="num">{{ c.n }}</td><td>{{ c.last[:10] }}</td></tr>{% endfor %}
+</table></div>
+{% if renewals %}
+<h2>Past renewals</h2>
+<ul>{% for o in renewals %}<li>{{ o.ref }}: <b>{{ 'lost' if o.event_type == 'renewal_lost' else 'renewed' }}</b> <span class="muted small">(closed {{ o.occurred_at[:10] }})</span></li>{% endfor %}</ul>
+{% endif %}
+{% endblock %}

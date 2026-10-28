@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>CSM Worklist</h1>
+<p class="sub">Demo sign-in. Pick a persona. Each organisation only ever sees its own data.</p>
+<form method="post" action="/login">
+{% for org, people in users | groupby("org_name") %}
+  <h2>{{ org }}</h2>
+  <div class="stats">
+  {% for u in people %}
+    <button class="stat" name="user_id" value="{{ u.user_id }}">
+      <div><b>{{ u.name }}</b></div>
+      <div class="muted small">{{ 'CS leader · whole organisation' if u.role == 'leader' else 'CSM · ' ~ u.n ~ ' accounts' }}</div>
+    </button>
+  {% endfor %}
+  </div>
+{% endfor %}
+</form>
+{% endblock %}

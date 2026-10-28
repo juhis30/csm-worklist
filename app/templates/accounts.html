@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Accounts · CSM Worklist{% endblock %}
+{% block content %}
+<h1>Accounts</h1>
+<div class="sub">As of {{ run.as_of[:10] }}. Ranked by expected ARR at risk; blind spots last. Up to 500 shown.</div>
+<form method="get" style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px">
+  <input name="q" value="{{ q }}" placeholder="Name or id" aria-label="Search">
+  {% if user.role == 'csm' %}<select name="mine" aria-label="Scope"><option value="1" {% if mine %}selected{% endif %}>My book</option>
+    <option value="0" {% if not mine %}selected{% endif %}>Whole organisation</option></select>{% endif %}
+  <button>Search</button>
+</form>
+<div class="scroll"><table>
+  <tr><th>Account</th><th class="num">Chance lost</th><th class="num">ARR</th><th class="num">At risk</th><th>Renews</th><th>CSM</th></tr>
+  {% for r in rows %}
+  <tr><td><a href="/accounts/{{ r.account_id }}">{{ r.name }}</a> {% if r.blind_spot %}<span class="badge">blind spot</span>{% endif %}
+      <div class="muted small">{{ r.account_id }} · {{ r.segment }}</div></td>
+    <td class="num">{{ r.p_lost | pct }}</td><td class="num">{{ r.arr | money }}</td><td class="num">{{ r.arr_at_risk | money }}</td>
+    <td>{{ r.renewal_date }}</td><td class="small">{{ r.csm_name }}</td></tr>
+  {% endfor %}
+</table></div>
+{% if not rows %}<p class="muted">No matches.</p>{% endif %}
+{% endblock %}

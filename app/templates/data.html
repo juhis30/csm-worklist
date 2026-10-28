@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Data health · CSM Worklist{% endblock %}
+{% block content %}
+<h1>Data health: {{ user.org_name }}</h1>
+<div class="sub">What reached us, what we used, what we threw away and why. Nothing is dropped silently.</div>
+{% if stale %}<div class="banner warn">Sources with no recent data at the last run: {{ stale }}</div>{% endif %}
+
+<h2>Delivery</h2>
+<div class="scroll"><table>
+  <tr><th>Source</th><th class="num">Delivered</th><th class="num">Duplicates dropped</th><th class="num">Not arrived yet</th></tr>
+  {% for r in delivery %}<tr><td>{{ r.source }}</td><td class="num">{{ r.delivered }}</td><td class="num">{{ r.duplicates }}</td><td class="num">{{ r.in_flight }}</td></tr>{% endfor %}
+</table></div>
+
+<h2>Accepted events</h2>
+<div class="scroll"><table>
+  <tr><th>Source</th><th class="num">Events</th><th class="num">Accounts</th><th>First</th><th>Latest</th>
+      <th class="num">Average delay (hours)</th><th class="num">Over 2 days late</th></tr>
+  {% for r in accepted %}<tr><td>{{ r.source }}</td><td class="num">{{ r.n }}</td><td class="num">{{ r.accounts }}</td>
+    <td>{{ r.first[:10] }}</td><td>{{ r.last[:10] }}</td><td class="num">{{ '%.1f' % r.lag_h }}</td><td class="num">{{ r.late }}</td></tr>{% endfor %}
+</table></div>
+
+<h2>Rejected events</h2>
+<p class="muted small">Rejections that a CRM fix could resolve (unknown domain, unmapped workspace, personal email, ambiguous domain) are retried every run.</p>
+<div class="scroll"><table>
+  <tr><th>Source</th><th>Reason</th><th class="num">Count</th><th>Example</th></tr>
+  {% for r in rejected %}<tr><td>{{ r.source }}</td><td>{{ r.reason }}</td><td class="num">{{ r.n }}</td><td class="small"><code>{{ r.example }}</code></td></tr>{% endfor %}
+</table></div>
+
+<h2>Salesforce gaps</h2>
+<p>{{ crm.n }} accounts. No domain: <b>{{ crm.no_domain }}</b> (support and email can't be linked) · ARR missing or zero:
+  <b>{{ crm.no_arr }}</b> · no contact: <b>{{ crm.no_contact }}</b> · no product workspace mapped: <b>{{ crm.no_workspace }}</b>.</p>
+{% endblock %}

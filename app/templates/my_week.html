@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}My week · CSM Worklist{% endblock %}
+{% block content %}
+<h1>{% if owner == user.id %}Your week{% elif owner %}{{ (csms | selectattr('user_id', 'equalto', owner) | first).name }}'s book{% else %}All of {{ user.org_name }}{% endif %}</h1>
+<div class="sub">
+  Scores as of <b>{{ run.as_of[:10] }}</b>{% if prev %}, compared with {{ prev.as_of[:10] }}{% endif %}.
+  Ranked by <b>expected ARR at risk</b> = chance of losing the renewal × ARR.
+  {% if user.role == 'leader' %}
+  <form method="get" style="display:inline">
+    <select name="csm" onchange="this.form.submit()" aria-label="Choose a CSM">
+      <option value="">Whole organisation</option>
+      {% for c in csms %}<option value="{{ c.user_id }}" {% if c.user_id == owner %}selected{% endif %}>{{ c.name }}</option>{% endfor %}
+    </select>
+  </form>
+  {% endif %}
+</div>
+
+{% if not validation.validated %}
+<div class="banner warn"><b>Treat this ranking as directional.</b> On held-out data, the model for {{ user.org_name }}
+  didn't clearly beat a simple rule: {{ validation.reasons | join("; ") }}. <a href="/model">Details</a></div>
+{% endif %}
+{% if stale %}
+<div class="banner warn"><b>Data delay:</b> nothing new from {{ stale.keys() | join(", ") }} recently. Tasks driven by
+  those sources were held back, because a broken feed looks the same as a quiet customer.</div>
+{% endif %}
+
+<div class="stats">
+  <div class="stat"><div class="muted small">Accounts</div><div class="v">{{ book.n }}</div></div>
+  <div class="stat"><div class="muted small">ARR</div><div class="v">{{ book.arr | money }}</div></div>
+  <div class="stat"><div class="muted small">Expected ARR at risk</div><div class="v">{{ book.at_risk | money }}</div></div>
+  <div class="stat"><div class="muted small">Blind spots</div><div class="v">{{ book.blind }}</div></div>
+</div>
+
+<h2>1 · Tasks from the agent ({{ tasks | length }})</h2>
+{% if not tasks %}<p class="muted">Nothing waiting.</p>{% endif %}
+{% for t in tasks %}{% include "_task.html" %}{% endfor %}
+
+<h2>2 · Top 15 by expected ARR at risk</h2>
+<div class="scroll"><table>
+  <tr><th>#</th><th>Account</th><th class="num">Chance lost</th><th class="num">Change</th><th class="num">ARR</th>
+      <th class="num">At risk</th><th>Renews</th><th>Main reasons</th></tr>
+  {% for r in ranked %}
+  <tr>
+    <td class="muted">{{ loop.index }}</td>
+    <td><a href="/accounts/{{ r.account_id }}">{{ r.name }}</a>
+      <div class="muted small">{{ r.account_id }} · {{ r.segment }}{% if owner != user.id %} · {{ r.csm_id }}{% endif %}</div></td>
+    <td class="num">{{ r.p_lost | pct }}</td>
+    <td class="num">{% if r.prev_p is not none %}{% set d = (r.p_lost - r.prev_p) * 100 %}<span class="{{ 'up' if d >= 0.5 else ('down' if d <= -0.5 else 'muted') }}">{{ '%+.0f' % d }} pts</span>{% else %}<span class="muted">new</span>{% endif %}</td>
+    <td class="num">{{ r.arr | money }}</td>
+    <td class="num"><b>{{ r.arr_at_risk | money }}</b></td>
+    <td>{{ r.renewal_date }}</td>
+    <td><ul class="reasons small">{% for x in reasons(r, params) %}<li>{{ x.label }}: <b>{{ x.value }}</b>{% if x.typical %} <span class="muted">(typical {{ x.typical }})</span>{% endif %}</li>{% endfor %}</ul></td>
+  </tr>
+  {% endfor %}
+</table></div>
+
+<h2>3 · Blind spots renewing within 120 days</h2>
+<p class="muted small">Too little data to rank fairly. They aren't safe. We just can't tell, and silent accounts are how renewals get missed.</p>
+{% if not blind %}<p class="muted">None.</p>{% else %}
+<div class="scroll"><table>
+  <tr><th>Account</th><th>Renews</th><th class="num">ARR</th><th>Data in the last 180 days</th></tr>
+  {% for r in blind %}{% set c = r.coverage | fromjson %}
+  <tr><td><a href="/accounts/{{ r.account_id }}">{{ r.name }}</a></td><td>{{ r.renewal_date }}</td><td class="num">{{ r.arr | money }}</td>
+    <td class="small">usage {{ c.product }} · support {{ c.zendesk }} · billing {{ c.stripe }} · email {{ c.gmail }}</td></tr>
+  {% endfor %}
+</table></div>{% endif %}
+{% endblock %}

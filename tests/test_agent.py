@@ -100,7 +100,9 @@ def test_retrain_gate_keeps_old_model_when_new_one_is_clearly_worse(world_db, mo
     ev, acc = load_events(world_db, "northwind"), load_accounts(world_db, "northwind")
 
     def fake_training(auc):
-        metrics = {"model": {"auc": auc}, "validation": {"validated": True}}
+        """A 'retrained' model identical to the current one except for its test AUC."""
+        metrics = json.loads(row["metrics"])
+        metrics["model"]["auc"] = auc
         return lambda *a, **k: (LinearModel(dict(current.p)), metrics)
 
     log = agent.RunLog()

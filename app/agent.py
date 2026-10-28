@@ -131,13 +131,16 @@ def write_scores(conn, tenant_id, run_id, as_of, model_id, scored):
         "blind_spot, features, contributions, coverage) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", rows)
 
 
-def strongest_driver(contributions: dict):
-    """(input name as a feature, its source) for the input pushing risk up the most."""
-    name, value = max(contributions.items(), key=lambda kv: kv[1])
+def strongest_driver(contributions: dict, features: dict):
+    """(input name, source) of the input pushing risk up the most, skipping inputs that
+    were only filled in because data was missing: their effect is the "no data" input's."""
+    real = {k: v for k, v in contributions.items() if k in MISSING_GROUPS or features.get(k) is not None}
+    name, value = max(real.items(), key=lambda kv: kv[1])
     if value <= 0:
         return None, None
-    feature = MISSING_GROUPS[name][0] if name in MISSING_GROUPS else name
-    return feature, FEATURE_BY_NAME[feature].source
+    if name in MISSING_GROUPS:
+        return name, "missing"
+    return name, FEATURE_BY_NAME[name].source
 
 
 def top_of_book(rows):
@@ -199,11 +202,12 @@ def create_tasks(conn, tenant_id, run_id, as_of, stale_sources, log):
         if s["account_id"] in cooling:
             skipped["cooldown"] += 1
             continue
-        driver, source = strongest_driver(json.loads(s["contributions"]))
+        features = json.loads(s["features"])
+        driver, source = strongest_driver(json.loads(s["contributions"]), features)
         if source in stale_sources and kind != "blind_spot":
             skipped["stale_source"] += 1
             continue
-        d = outreach.draft(kind, driver, s, json.loads(s["features"]), days_to_renewal)
+        d = outreach.draft(kind, driver, s, features, days_to_renewal)
         conn.execute(
             "INSERT INTO tasks (tenant_id, account_id, csm_id, run_id, score_id, kind, reason, draft_to, "
             "draft_subject, draft_body, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",

@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}Model · CSM Worklist{% endblock %}
+{% block content %}
+<h1>Model card: {{ user.org_name }}</h1>
+<div class="sub">Predicts the <b>chance that an account's next renewal is lost</b>, from what the system knew on each Monday.
+  Trained only on {{ user.org_name }}'s data, with outcomes from Salesforce closed renewals. Logistic regression, so every
+  score is an exact sum of per-input contributions.</div>
+
+{% for m in models %}{% set met = m.metrics | fromjson %}{% set p = m.params | fromjson %}
+<div class="card" id="{{ m.model_id }}">
+  <h2 style="margin-top:0"><code>{{ m.model_id }}</code> <span class="badge">{{ m.status }}</span></h2>
+  <div class="small muted">Trained {{ m.trained_at }} on {{ p.trained_rows }} monthly account snapshots. {{ m.note or '' }}</div>
+
+  <div class="banner {{ 'info' if met.validation.validated else 'warn' }}" style="margin-top:10px">
+    {% if met.validation.validated %}<b>Validated:</b> clearly beats the simple rule on held-out data.
+    {% else %}<b>Not validated:</b> {{ met.validation.reasons | join("; ") }}.{% endif %}</div>
+
+  <h3>Test on the 6 months the model never saw</h3>
+  <p class="small muted">Trained on snapshots before {{ met.split[:10] }} whose outcomes were already known then; tested on snapshots
+    from {{ met.split[:10] }} to {{ met.cutoff[:10] }}: {{ met.test_rows }} snapshots, {{ met.test_positives }} lost renewals,
+    {{ met.base_rate | pct }} loss rate.</p>
+  <div class="scroll"><table class="small">
+    <tr><th></th><th class="num">AUC</th><th class="num">Top 10%: share lost</th><th class="num">Lift vs random</th><th class="num">Lost ARR in our top 20%</th></tr>
+    {% for key, name in [('model', 'This model'), ('rules_baseline', 'Simple rule (usage down, tickets up, payment issues)')] %}{% set r = met[key] %}
+    <tr><td>{{ name }}</td><td class="num">{{ '%.3f' % r.auc }}</td><td class="num">{{ r.precision_top_decile | pct }}</td>
+      <td class="num">{{ '%.1fx' % r.lift_top_decile }}</td><td class="num">{{ r.lost_arr_top20 | pct }}</td></tr>
+    {% endfor %}
+    <tr class="muted"><td>Random order</td><td class="num">0.500</td><td class="num">{{ met.base_rate | pct }}</td><td class="num">1.0x</td><td class="num">≈20%</td></tr>
+  </table></div>
+
+  <details style="margin-top:10px"><summary class="small">Calibration: predicted vs actual loss rate, in tenths of the test set</summary>
+    <table class="small"><tr><th class="num">Predicted</th><th class="num">Actual</th><th class="num">Snapshots</th></tr>
+    {% for b in met.calibration %}<tr><td class="num">{{ b.predicted | pct }}</td><td class="num">{{ b.observed | pct }}</td><td class="num">{{ b.n }}</td></tr>{% endfor %}</table>
+  </details>
+  <details><summary class="small">Weights (per standard deviation of each input)</summary>
+    <table class="small"><tr><th>Input</th><th class="num">Weight</th><th class="num">Average</th><th class="num">Used when missing</th></tr>
+    {% for name, c in p.coefs | dictsort(by='value', reverse=true) %}
+      <tr><td>{{ features[name].label if name in features else missing_labels[name] }}{% if features[name] and features[name].log %} <span class="muted">(log scale)</span>{% endif %}</td>
+        <td class="num {{ 'up' if c > 0 else 'down' }}">{{ '%+.3f' % c }}</td><td class="num">{{ '%.3f' % p.means[name] }}</td>
+        <td class="num">{{ '%.3f' % p.medians[name] if name in p.medians else '' }}</td></tr>
+    {% endfor %}
+    <tr><td><i>Intercept</i></td><td class="num">{{ '%+.3f' % p.intercept }}</td><td></td><td></td></tr></table>
+  </details>
+</div>
+{% endfor %}
+{% endblock %}

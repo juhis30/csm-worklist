@@ -1,0 +1,23 @@
+{# One agent task with its drafted email. Expects: t (task row), user. #}
+<div class="card">
+  <div><a href="/accounts/{{ t.account_id }}"><b>{{ t.name }}</b></a>
+    <span class="badge">{{ t.kind.replace('_', ' ') }}</span>
+    <span class="muted small">· {{ t.p_lost | pct }} chance of losing the renewal · {{ t.arr | money }} ARR · renews {{ t.renewal_date }}</span></div>
+  <div style="margin:6px 0">{{ t.reason }}</div>
+  {% if user.role == 'leader' or user.id == t.csm_id %}
+    {% if t.draft_to %}
+    <details><summary>Review the drafted email to {{ t.draft_to }}</summary>
+      <form method="post" action="/tasks/{{ t.task_id }}/send" style="margin-top:8px">
+        <input name="subject" value="{{ t.draft_subject }}" style="width:100%; margin-bottom:6px" aria-label="Subject">
+        <textarea name="body" rows="8" aria-label="Body">{{ t.draft_body.replace('{csm}', user.name) }}</textarea>
+        <div style="margin-top:6px; display:flex; gap:8px; flex-wrap:wrap">
+          <button class="primary">Approve &amp; send</button>
+          <button formaction="/tasks/{{ t.task_id }}/dismiss">Dismiss</button>
+        </div>
+      </form>
+    </details>
+    {% else %}
+    <form method="post" action="/tasks/{{ t.task_id }}/dismiss"><button>Mark handled</button></form>
+    {% endif %}
+  {% endif %}
+</div>

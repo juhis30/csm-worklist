@@ -5,7 +5,7 @@ draft can hint at a "risk score". The draft is a starting point. Nothing is
 sent without the CSM approving it.
 """
 
-from app.features import FEATURE_BY_NAME
+from app.features import FEATURE_BY_NAME, MISSING_LABELS
 
 WHY = {
     "entered_top10": "Entered your top 10 by expected ARR at risk this week",
@@ -40,9 +40,10 @@ def draft(kind, driver, account, features, days_to_renewal):
     """-> {reason, to, subject, body}. to/subject/body are None when there's nobody to write to."""
     feature = FEATURE_BY_NAME.get(driver)
     reason = WHY[kind]
-    if feature:
-        value = features.get(driver)
-        reason += f". Strongest driver: {feature.label} = {'missing' if value is None else feature.fmt.format(value)}"
+    if driver in MISSING_LABELS:
+        reason += f". Strongest driver: {MISSING_LABELS[driver]}"
+    elif feature:
+        reason += f". Strongest driver: {feature.label} = {feature.fmt.format(features[driver])}"
     reason += f". Renewal in {days_to_renewal} days."
 
     if kind == "blind_spot" or not account["contact_email"]:
@@ -52,7 +53,9 @@ def draft(kind, driver, account, features, days_to_renewal):
         return {"reason": reason + " Our contact's email bounced: find the new champion first.",
                 "to": None, "subject": None, "body": None}
 
-    subject, body = PLAYS[feature.source if feature else "salesforce"]
+    # A play may only claim what we actually saw. Missing data -> a plain check-in.
+    play = "gmail" if driver in MISSING_LABELS else (feature.source if feature else "salesforce")
+    subject, body = PLAYS[play]
     first = (account["contact_name"] or "there").split()[0]
     # {csm} is filled with the approving CSM's name at send time.
     return {"reason": reason, "to": account["contact_email"],
