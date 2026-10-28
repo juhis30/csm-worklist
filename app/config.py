@@ -12,3 +12,11 @@ SEED = 42
 
 # Fraction of accounts to generate; tests use a smaller world.
 SCALE = float(os.environ.get("WORKLIST_SCALE", "1.0"))
+
+# "simulated": each scheduled run advances the clock one week, until DATA_END (demo).
+# "wall": as_of is today (how it would run in production).
+CLOCK_MODE = os.environ.get("WORKLIST_CLOCK", "simulated")
+BOOTSTRAP_WEEKS_BEHIND = 3
+
+# Shared secret between the scheduler (GitHub Actions) and the app.
+AGENT_TOKEN = os.environ.get("WORKLIST_AGENT_TOKEN", "dev-token")
