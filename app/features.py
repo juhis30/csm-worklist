@@ -31,7 +31,6 @@ class Feature:
 FEATURES = [
     Feature("usage_30d", "Product events, last 30 days", "product", ("usage",), 30, log=True),
     Feature("usage_prior_60d", "Product events, 31-90 days ago", "product", ("usage",), 90, log=True, skip_recent_days=30),
-    Feature("active_users_30d", "Active users, last 30 days", "product", ("usage",), 30, log=True),
     Feature("days_since_usage", "Days since last product activity", "product", ("usage",), None),
     Feature("tickets_90d", "Support tickets opened, last 90 days", "zendesk", ("ticket_opened",), 90, log=True),
     Feature("high_pri_tickets_90d", "High/urgent tickets, last 90 days", "zendesk", ("ticket_opened",), 90, log=True),
@@ -50,7 +49,7 @@ FEATURE_BY_NAME = {f.name: f for f in FEATURES}
 # Missing source -> its features are NaN, plus one yes/no indicator input.
 # The model learns what "we have no data" means instead of reading it as healthy.
 MISSING_GROUPS = {
-    "no_product_data": ["usage_30d", "usage_prior_60d", "active_users_30d", "days_since_usage"],
+    "no_product_data": ["usage_30d", "usage_prior_60d", "days_since_usage"],
     "no_csat": ["csat_bad_rate_180d"],
     "no_billing_data": ["payment_failures_120d", "downgrades_365d"],
     "no_email_data": ["reply_rate_60d", "bounces_180d"],
@@ -131,6 +130,8 @@ def build_features(events: pd.DataFrame, accounts: pd.DataFrame, as_of, gmail_en
     # --- product usage: two levels, not a ratio ---
     out["usage_30d"] = count(between("usage", 30))
     out["usage_prior_60d"] = count(between("usage", 90, 30))
+    # Shown to CSMs as context, not a model input: it moves with usage_30d so closely
+    # that having both gave usage a nonsensical positive weight (collinearity).
     out["active_users_30d"] = between("usage", 30).groupby("account_id")["actor"].nunique().reindex(idx, fill_value=0)
     last_use = ev[ev["event_type"] == "usage"].groupby("account_id")["occurred_at"].max().reindex(idx)
     out["days_since_usage"] = (as_of - last_use).dt.days.clip(upper=180).astype(float)
@@ -167,6 +168,7 @@ def build_features(events: pd.DataFrame, accounts: pd.DataFrame, as_of, gmail_en
     # Never heard from a source = unknown. Heard before, quiet now = a real zero.
     for has, group in ((has_product, "no_product_data"), (has_billing, "no_billing_data"), (has_email, "no_email_data")):
         out.loc[~has, MISSING_GROUPS[group]] = np.nan
+    out.loc[~has_product, "active_users_30d"] = np.nan
     # The indicators are explicit columns, not "is the first feature empty": reply_rate
     # is also empty when the CSM simply sent nothing for 60 days, which isn't "no data".
     out["no_product_data"] = (~has_product).astype(float)
