@@ -32,6 +32,7 @@ TOP_OF_BOOK = 10           # "entered top 10 by expected ARR at risk"
 RISK_JUMP = 0.10           # "P(lost) rose by 10+ points"
 BLIND_SPOT_HORIZON = 90    # days to renewal
 TASK_COOLDOWN_DAYS = 21
+TASK_EXPIRY_DAYS = 28
 STALE_AFTER_DAYS = 4
 
 
@@ -149,7 +150,20 @@ def top_of_book(rows):
     return {a for top in by_csm.values() for a in top}
 
 
+def expire_tasks(conn, tenant_id, as_of):
+    """Close open tasks that are moot: the renewal they were about has passed,
+    or nobody acted for 4 weeks. Frees the account for a fresh task if it still qualifies."""
+    stale_before = (pd.Timestamp(as_of) - pd.Timedelta(days=TASK_EXPIRY_DAYS)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return conn.execute(
+        "UPDATE tasks SET status = 'dismissed', resolved_at = :as_of, resolved_by = 'agent:expired' "
+        "WHERE tenant_id = :t AND status = 'open' AND (created_at < :stale_before "
+        " OR (SELECT renewal_date FROM scores s WHERE s.score_id = tasks.score_id) < substr(:as_of, 1, 10))",
+        {"t": tenant_id, "as_of": as_of, "stale_before": stale_before}).rowcount
+
+
 def create_tasks(conn, tenant_id, run_id, as_of, stale_sources, log):
+    expired = expire_tasks(conn, tenant_id, as_of)
+
     def scores_of(rid):
         return conn.execute(
             "SELECT s.*, a.name, a.csm_id, a.contact_name, a.contact_email FROM scores s JOIN accounts a "
@@ -196,7 +210,8 @@ def create_tasks(conn, tenant_id, run_id, as_of, stale_sources, log):
             (tenant_id, s["account_id"], s["csm_id"], run_id, s["score_id"], kind, d["reason"],
              d["to"], d["subject"], d["body"], as_of))
         created[kind] = created.get(kind, 0) + 1
-    log.step("tasks", created=created, skipped=skipped, compared_with_run=prev_run[0] if prev_run else None)
+    log.step("tasks", created=created, expired=expired, skipped=skipped,
+             compared_with_run=prev_run[0] if prev_run else None)
 
 
 # ------------------------------------------------------------------ orchestration

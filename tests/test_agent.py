@@ -71,6 +71,54 @@ def test_blind_spot_tasks_never_draft_a_customer_email(world_db):
     assert world_db.execute("SELECT COUNT(*) FROM tasks WHERE kind = 'blind_spot' AND draft_to IS NOT NULL").fetchone()[0] == 0
 
 
+def test_tasks_expire_when_renewal_passes_or_after_four_weeks(world_db):
+    s = world_db.execute("SELECT * FROM scores WHERE tenant_id = 'cobalt' ORDER BY score_id DESC LIMIT 1").fetchone()
+    insert = ("INSERT INTO tasks (tenant_id, account_id, csm_id, run_id, score_id, kind, reason, created_at) "
+              "VALUES ('cobalt', ?, NULL, ?, ?, 'risk_jumped', 'test', ?)")
+    fresh = world_db.execute(insert, ("X-fresh", s["run_id"], s["score_id"], s["as_of"])).lastrowid
+    old = world_db.execute(insert, ("X-old", s["run_id"], s["score_id"], "2026-01-01T06:00:00Z")).lastrowid
+
+    def status(task_id):
+        return world_db.execute("SELECT status, resolved_by FROM tasks WHERE task_id = ?", (task_id,)).fetchone()
+
+    assert agent.expire_tasks(world_db, "cobalt", s["as_of"]) >= 1
+    assert tuple(status(old)) == ("dismissed", "agent:expired")
+    assert status(fresh)["status"] == "open"
+    # once the renewal date is behind us, the fresh one goes too
+    agent.expire_tasks(world_db, "cobalt", (date.fromisoformat(s["renewal_date"]) + timedelta(days=1)).isoformat() + "T06:00:00Z")
+    assert status(fresh)["status"] == "dismissed"
+
+
+def test_retrain_gate_keeps_old_model_when_new_one_is_clearly_worse(world_db, monkeypatch):
+    from app.model import LinearModel, active_model
+    with db.transaction(world_db):
+        world_db.execute("UPDATE model_versions SET trained_at = '2025-01-01T00:00:00Z' WHERE tenant_id = 'northwind'")
+    row, current = active_model(world_db, "northwind")
+    old_auc = json.loads(row["metrics"])["model"]["auc"]
+    as_of = agent.as_of_iso(latest(world_db, "northwind"))
+    from app.features import load_accounts, load_events
+    ev, acc = load_events(world_db, "northwind"), load_accounts(world_db, "northwind")
+
+    def fake_training(auc):
+        metrics = {"model": {"auc": auc}, "validation": {"validated": True}}
+        return lambda *a, **k: (LinearModel(dict(current.p)), metrics)
+
+    log = agent.RunLog()
+    monkeypatch.setattr(agent, "train_and_evaluate", fake_training(old_auc - 0.05))
+    with db.transaction(world_db):
+        kept = agent.maybe_retrain(world_db, "northwind", as_of, ev, acc, True, log)
+    assert kept == row["model_id"] and log.steps[-1]["action"] == "new_model_rejected"
+    assert world_db.execute("SELECT COUNT(*) FROM model_versions WHERE tenant_id = 'northwind' "
+                            "AND status = 'rejected'").fetchone()[0] == 1
+
+    monkeypatch.setattr(agent, "train_and_evaluate", fake_training(old_auc - 0.01))   # within tolerance
+    with db.transaction(world_db):
+        replaced = agent.maybe_retrain(world_db, "northwind", as_of, ev, acc, True, log)
+    assert replaced != row["model_id"] and log.steps[-1]["action"] == "trained"
+    statuses = dict(world_db.execute("SELECT model_id, status FROM model_versions WHERE tenant_id = 'northwind'").fetchall())
+    assert statuses[row["model_id"]] == "retired" and statuses[replaced] == "active"
+
+
 def test_stale_source_is_detected():
     conn = db.connect(":memory:")
     db.init_schema(conn)
