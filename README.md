@@ -3,6 +3,7 @@
 A weekly ranked worklist for Customer Success Managers, kept current by an unattended agent.
 
 - Solution brief: [`docs/BRIEF.md`](docs/BRIEF.md)
+- Edge cases, trade-offs and details: [`docs/DECISIONS.md`](docs/DECISIONS.md)
 
 ## Stack
 
