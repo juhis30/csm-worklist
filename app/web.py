@@ -20,7 +20,8 @@ from app import agent, config, db
 from app.features import FEATURE_BY_NAME, MISSING_GROUPS, MISSING_LABELS
 
 app = FastAPI(title="CSM Worklist")
-app.add_middleware(SessionMiddleware, secret_key=config.SESSION_SECRET, same_site="lax")
+app.add_middleware(SessionMiddleware, secret_key=config.SESSION_SECRET, same_site="lax",
+                   https_only=config.ON_RENDER)
 templates = Jinja2Templates(directory=str(config.ROOT / "app" / "templates"))
 _conn = None
 

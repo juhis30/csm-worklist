@@ -21,3 +21,10 @@ BOOTSTRAP_WEEKS_BEHIND = 3
 # Shared secret between the scheduler (GitHub Actions) and the app.
 AGENT_TOKEN = os.environ.get("WORKLIST_AGENT_TOKEN", "dev-token")
 SESSION_SECRET = os.environ.get("WORKLIST_SESSION_SECRET", "dev-session-secret")
+
+# Render sets RENDER=true. There, a missing secret fails the deploy instead of falling back to a dev default.
+ON_RENDER = bool(os.environ.get("RENDER"))
+if ON_RENDER:
+    missing = [k for k in ("WORKLIST_AGENT_TOKEN", "WORKLIST_SESSION_SECRET") if not os.environ.get(k)]
+    if missing:
+        raise RuntimeError(f"set these environment variables on Render: {', '.join(missing)}")

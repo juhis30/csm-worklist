@@ -1,0 +1,42 @@
+# The scheduler: tells the deployed app to run the weekly agent.
+# Needs repo variable WORKLIST_URL (e.g. https://csm-worklist.onrender.com) and secret WORKLIST_AGENT_TOKEN.
+name: Weekly agent run
+
+on:
+  schedule:
+    - cron: "0 6 * * 1"   # Mondays 06:00 UTC
+  workflow_dispatch:       # "Run workflow" button, for demos
+
+concurrency:
+  group: agent-run
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      WORKLIST_URL: ${{ vars.WORKLIST_URL }}
+      TOKEN: ${{ secrets.WORKLIST_AGENT_TOKEN }}
+    steps:
+      - name: Wake the service
+        # The free tier sleeps when idle and takes up to a minute to wake.
+        run: |
+          for i in $(seq 1 20); do
+            if curl -fsS --max-time 30 "$WORKLIST_URL/healthz"; then echo; exit 0; fi
+            echo "not up yet ($i/20)"; sleep 15
+          done
+          exit 1
+
+      - name: Run the agent
+        run: |
+          curl -fsS --max-time 900 -X POST -H "Authorization: Bearer $TOKEN" \
+            "$WORKLIST_URL/internal/agent/run" -o result.json
+          python3 - <<'EOF'
+          import json, sys
+          results = json.load(open("result.json"))["results"]
+          for r in results:
+              print(f"{r['tenant']:<12} {r['as_of']}  {r['status']}")
+          # A failed organisation fails the job, so GitHub emails the repo owner.
+          sys.exit(1 if any(r["status"] == "failed" for r in results) else 0)
+          EOF

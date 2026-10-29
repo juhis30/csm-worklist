@@ -1,0 +1,20 @@
+# Render Blueprint: one free web service.
+# The free tier has no persistent disk, so the demo database is built during the build
+# (one simulated week behind) and every restart or wake-up starts from that state.
+services:
+  - type: web
+    name: csm-worklist
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt && python -m app.bootstrap
+    startCommand: uvicorn app.web:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /healthz
+    autoDeploy: true
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.10
+      - key: WORKLIST_SESSION_SECRET
+        generateValue: true
+      # Shared with the GitHub Actions scheduler, so you enter the same value in both places.
+      - key: WORKLIST_AGENT_TOKEN
+        sync: false
