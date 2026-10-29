@@ -34,7 +34,8 @@ python -m app.agent                        # run the weekly agent once by hand
 
 ## Deployment
 
-- **Live demo:** _URL added after the first deploy_
+- **Live demo:** https://csm-worklist.onrender.com (pick any persona on the login page;
+  the first visit after an idle spell takes about a minute while the free instance wakes)
 - **Hosting:** one free Render web service, defined in [`render.yaml`](render.yaml).
 - **Scheduler:** GitHub Actions ([`agent.yml`](.github/workflows/agent.yml)) calls
   `POST /internal/agent/run` every Monday at 06:00 UTC with a shared bearer token.
@@ -49,6 +50,10 @@ paid instance with a persistent disk (or Postgres), with `WORKLIST_CLOCK=wall`.
 
 Measured memory peaks: 381 MB to build the database, 289 MB for a run that retrains
 all three organisations. Both are under the free tier's 512 MB.
+
+**Known limitation:** the Data page recounts every raw event on each visit. For Northwind
+(~140k events) that takes about 11 s on the free instance (2.5 s on a laptop). The counts
+only change when the agent runs, so the fix is for each run to save them and the page to read them.
 
 ### Deploying your own copy
 
