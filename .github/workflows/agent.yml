@@ -19,11 +19,28 @@ jobs:
       WORKLIST_URL: ${{ vars.WORKLIST_URL }}
       TOKEN: ${{ secrets.WORKLIST_AGENT_TOKEN }}
     steps:
+      - name: Check settings
+        # Misconfiguration fails here with a clear message, not as five minutes of retries.
+        run: |
+          if [ -z "$WORKLIST_URL" ]; then
+            echo "::error::Repo variable WORKLIST_URL is empty. Add it under Settings > Secrets and variables > Actions > Variables (not Secrets)."; exit 1
+          fi
+          if [ -z "$TOKEN" ]; then
+            echo "::error::Repo secret WORKLIST_AGENT_TOKEN is empty. Add it under Settings > Secrets and variables > Actions > Secrets."; exit 1
+          fi
+          case "$WORKLIST_URL" in
+            https://*) ;;
+            *) echo "::error::WORKLIST_URL must start with https:// (got '$WORKLIST_URL')."; exit 1 ;;
+          esac
+          url="${WORKLIST_URL%/}"; url="${url%/healthz}"
+          echo "Using $url"
+          echo "WORKLIST_URL=$url" >> "$GITHUB_ENV"
+
       - name: Wake the service
         # The free tier sleeps when idle and takes up to a minute to wake.
         run: |
           for i in $(seq 1 20); do
-            if curl -fsS --max-time 30 "$WORKLIST_URL/healthz"; then echo; exit 0; fi
+            if curl -fsS --max-time 60 "$WORKLIST_URL/healthz"; then echo; exit 0; fi
             echo "not up yet ($i/20)"; sleep 15
           done
           exit 1
