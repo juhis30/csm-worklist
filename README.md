@@ -4,6 +4,7 @@ A weekly ranked worklist for Customer Success Managers, kept current by an unatt
 
 - Solution brief: [`docs/BRIEF.md`](docs/BRIEF.md)
 - Edge cases, trade-offs and details: [`docs/DECISIONS.md`](docs/DECISIONS.md)
+- The synthetic data, in plain terms: [`docs/DATA.md`](docs/DATA.md)
 
 ## Stack
 
