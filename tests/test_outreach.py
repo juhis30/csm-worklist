@@ -25,3 +25,9 @@ def test_strongest_driver_ignores_values_that_were_only_filled_in():
     contributions = {"usage_prior_60d": 0.30, "no_product_data": 0.20, "tickets_90d": 0.10}
     features = {"usage_prior_60d": None, "no_product_data": 1.0, "tickets_90d": 2.0}
     assert strongest_driver(contributions, features) == ("no_product_data", "missing")
+
+
+def test_strongest_driver_ignores_no_data_inputs_when_the_data_exists():
+    contributions = {"no_csat": 0.40, "tickets_90d": 0.10}
+    features = {"no_csat": 0.0, "tickets_90d": 2.0}
+    assert strongest_driver(contributions, features) == ("tickets_90d", "zendesk")

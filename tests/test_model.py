@@ -30,7 +30,7 @@ def test_contributions_add_up_to_the_score(frame):
     m = LinearModel.fit(frame)
     out = score(m, frame)
     for _, r in out.head(20).iterrows():
-        logit = m.p["intercept"] + sum(json.loads(r["contributions"]).values())
+        logit = m.p["typical_logit"] + sum(json.loads(r["contributions"]).values())
         assert math.isclose(1 / (1 + math.exp(-logit)), r["p_lost"], abs_tol=1e-6)
 
 
@@ -66,3 +66,14 @@ def test_validation_flags_a_model_that_doesnt_beat_the_rule():
     strong = {"test_positives": 300, "model": {"auc": 0.67, "lift_top_decile": 2.6},
               "rules_baseline": {"auc": 0.53, "lift_top_decile": 1.7}}
     assert validation_verdict(strong)["validated"]
+
+
+def test_typical_account_contributes_nothing_and_scores_the_typical_risk(frame):
+    """'Typical' means the training median everywhere: shown, compared against, and scored from."""
+    m = LinearModel.fit(frame)
+    med = m.p["medians"]
+    row = {f.name: (math.expm1(med[f.name]) if f.log else med[f.name]) for f in FEATURES}
+    row.update({flag: med[flag] for flag in MISSING_GROUPS})
+    typical = pd.DataFrame([row])
+    assert np.allclose(m.contributions(typical).to_numpy(), 0, atol=1e-9)
+    assert math.isclose(m.predict(typical)[0], 1 / (1 + math.exp(-m.p["typical_logit"])), abs_tol=1e-9)

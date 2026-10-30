@@ -49,19 +49,29 @@ def pct(v):
     return "-" if v is None else f"{v:.0%}"
 
 
+def yes_no(v):
+    v = float(v or 0)
+    return "yes" if v > 0.5 else "no" if v < 0.5 else "half of accounts"
+
+
+def typical_p(params):
+    return 1 / (1 + math.exp(-params["typical_logit"]))
+
+
 def explain(score_row, params):
     """A stored score -> one row per model input: label, value, typical value, contribution.
 
-    Typical = the training median, in the same units the CSM sees.
+    Typical = the training median, in the same units the CSM sees. Contributions are
+    measured from that same median, so a value at "typical" contributes exactly 0.
     """
     feats = json.loads(score_row["features"])
     rows = []
     for name, contrib in json.loads(score_row["contributions"]).items():
         if name in MISSING_GROUPS:
-            if not feats.get(name):
-                continue   # data present: the "no data" input is 0 and only shifts the baseline
+            if contrib == 0:
+                continue   # same as the typical account, so it changes nothing
             feature = FEATURE_BY_NAME[MISSING_GROUPS[name][0]]
-            label, shown, typical = MISSING_LABELS[name], "yes", None
+            label, shown, typical = MISSING_LABELS[name], yes_no(feats.get(name)), yes_no(params["medians"][name])
         else:
             feature = FEATURE_BY_NAME[name]
             value = feats.get(name)
@@ -89,7 +99,7 @@ def reasons(score_row, params, n=2, direction=1):
 
 
 templates.env.filters.update(money=money, pct=pct, fromjson=json.loads)
-templates.env.globals.update(explain=explain, reasons=reasons)
+templates.env.globals.update(explain=explain, reasons=reasons, typical_p=typical_p, yes_no=yes_no)
 
 
 # ------------------------------------------------------------------ sign-in
@@ -223,7 +233,7 @@ def account(request: Request, account_id: str, score_id: int | None = None, u: U
         model = u.scope.one("SELECT * FROM model_versions WHERE tenant_id = :tenant_id AND model_id = :m",
                             m=s["model_id"])
         params = json.loads(model["params"])
-        logit = params["intercept"] + sum(json.loads(s["contributions"]).values())
+        logit = params["typical_logit"] + sum(json.loads(s["contributions"]).values())
     tasks = u.scope.all("SELECT * FROM tasks WHERE tenant_id = :tenant_id AND account_id = :account_id "
                         "ORDER BY created_at DESC", **by_account)
     sent = u.scope.all("SELECT o.* FROM outbox o JOIN tasks t ON t.task_id = o.task_id "

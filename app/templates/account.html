@@ -10,7 +10,7 @@
 {% set feats = s.features | fromjson %}
 <div class="stats">
   <div class="stat"><div class="muted small">Chance of losing the next renewal</div><div class="v">{{ s.p_lost | pct }}</div>
-    <div class="muted small">typical account: {{ params.base_rate | pct }}</div></div>
+    <div class="muted small">typical account: {{ typical_p(params) | pct }}</div></div>
   <div class="stat"><div class="muted small">ARR (Salesforce)</div><div class="v">{{ s.arr | money }}</div></div>
   <div class="stat"><div class="muted small">Expected ARR at risk</div><div class="v">{{ s.arr_at_risk | money }}</div></div>
   <div class="stat"><div class="muted small">Next renewal</div><div class="v">{{ s.renewal_date }}</div></div>
@@ -38,10 +38,12 @@
 <div class="card small">
   Score #{{ s.score_id }}, as of <b>{{ s.as_of }}</b>, agent run <a href="/runs#run-{{ s.run_id }}">#{{ s.run_id }}</a>,
   model <a href="/model#{{ s.model_id }}"><code>{{ s.model_id }}</code></a>.<br>
-  Starting point (intercept) <b>{{ '%.3f' % params.intercept }}</b> + sum of contributions below
-  <b>{{ '%+.3f' % (logit - params.intercept) }}</b> = <b>{{ '%.3f' % logit }}</b> log-odds
+  Starting point: the typical account, every input at its median <b>{{ '%.3f' % params.typical_logit }}</b>
+  ({{ '%.1f' % (typical_p(params) * 100) }}%) + sum of contributions below
+  <b>{{ '%+.3f' % (logit - params.typical_logit) }}</b> = <b>{{ '%.3f' % logit }}</b> log-odds
   → 1 / (1 + e<sup>−({{ '%.3f' % logit }})</sup>) = <b>{{ '%.1f' % (s.p_lost * 100) }}%</b>.<br>
-  Each contribution = the model's weight × how far this account's value is from the average account. Positive raises risk.
+  Each contribution = the model's weight × how far this account's value is from the typical value shown. Positive raises risk;
+  a value equal to the typical one contributes 0, and "no data" lines appear only when this account differs from the typical one.
 </div>
 <div class="scroll"><table>
   <tr><th>Input</th><th>This account</th><th>Typical</th><th class="num">Contribution</th><th></th><th>Evidence</th></tr>

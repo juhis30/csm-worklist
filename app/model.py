@@ -9,6 +9,10 @@ of per-input contributions, so "why is this account at the top" has a precise
 answer that adds up to the number shown. The fitted model is stored as plain
 JSON (medians, means, stds, coefficients), and scoring is a dot product
 written out below, so any score can be recomputed by hand.
+
+"Typical account" means one thing everywhere: every input at its training
+median. Contributions are measured from it, the calculation starts from its
+score, and the UI shows the same medians as "typical".
 """
 
 import json
@@ -86,20 +90,26 @@ class LinearModel:
             col = df[f.name].astype(float)
             col = np.log1p(col.clip(lower=0)) if f.log else col
             medians[f.name] = float(col.median()) if col.notna().any() else 0.0
+        for flag in MISSING_GROUPS:
+            medians[flag] = float(df[flag].astype(float).median())
         X = cls.raw_inputs(df, medians)
         means, stds = X.mean(), X.std().replace(0, 1.0)
         clf = LogisticRegression(C=0.3, max_iter=2000).fit((X - means) / stds, df["label"])
+        coefs = dict(zip(INPUTS, clf.coef_[0].tolist()))
+        # The typical account's log-odds: the same linear model, evaluated at every input's median.
+        typical_logit = float(clf.intercept_[0]) + sum(coefs[k] * (medians[k] - means[k]) / stds[k] for k in INPUTS)
         return cls({"inputs": INPUTS, "medians": medians, "means": means.to_dict(), "stds": stds.to_dict(),
-                    "coefs": dict(zip(INPUTS, clf.coef_[0].tolist())), "intercept": float(clf.intercept_[0])})
+                    "coefs": coefs, "intercept": float(clf.intercept_[0]), "typical_logit": typical_logit})
 
     def contributions(self, df):
-        """Per-input log-odds contribution, relative to an average account."""
+        """Per-input log-odds contribution, relative to the typical account (every input at its median)."""
         X = self.raw_inputs(df, self.p["medians"])
-        Z = (X - pd.Series(self.p["means"])) / pd.Series(self.p["stds"])
-        return Z[self.p["inputs"]] * pd.Series(self.p["coefs"])
+        inputs = self.p["inputs"]
+        medians, stds, coefs = (pd.Series(self.p[k])[inputs] for k in ("medians", "stds", "coefs"))
+        return (X[inputs] - medians) / stds * coefs
 
     def predict(self, df):
-        return 1 / (1 + np.exp(-(self.p["intercept"] + self.contributions(df).sum(axis=1))))
+        return 1 / (1 + np.exp(-(self.p["typical_logit"] + self.contributions(df).sum(axis=1))))
 
 
 def rules_baseline(df):
@@ -212,7 +222,7 @@ def active_model(conn, tenant_id):
 def score(model: LinearModel, feats: pd.DataFrame) -> pd.DataFrame:
     contrib = model.contributions(feats)
     out = feats.copy()
-    out["p_lost"] = 1 / (1 + np.exp(-(model.p["intercept"] + contrib.sum(axis=1))))
+    out["p_lost"] = 1 / (1 + np.exp(-(model.p["typical_logit"] + contrib.sum(axis=1))))
     out["arr_at_risk"] = out["p_lost"] * feats["arr"].fillna(0)
     # Unrounded, so stored contributions add up to the stored score exactly.
     out["contributions"] = [json.dumps(r) for r in contrib.to_dict("records")]

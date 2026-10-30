@@ -33,13 +33,14 @@
     {% for b in met.calibration %}<tr><td class="num">{{ b.predicted | pct }}</td><td class="num">{{ b.observed | pct }}</td><td class="num">{{ b.n }}</td></tr>{% endfor %}</table>
   </details>
   <details><summary class="small">Weights (per standard deviation of each input)</summary>
-    <table class="small"><tr><th>Input</th><th class="num">Weight</th><th class="num">Average</th><th class="num">Used when missing</th></tr>
+    <table class="small"><tr><th>Input</th><th class="num">Weight</th><th class="num">Typical (median; also used when missing)</th></tr>
     {% for name, c in p.coefs | dictsort(by='value', reverse=true) %}
       <tr><td>{{ features[name].label if name in features else missing_labels[name] }}{% if features[name] and features[name].log %} <span class="muted">(log scale)</span>{% endif %}</td>
-        <td class="num {{ 'up' if c > 0 else 'down' }}">{{ '%+.3f' % c }}</td><td class="num">{{ '%.3f' % p.means[name] }}</td>
-        <td class="num">{{ '%.3f' % p.medians[name] if name in p.medians else '' }}</td></tr>
+        <td class="num {{ 'up' if c > 0 else 'down' }}">{{ '%+.3f' % c }}</td>
+        <td class="num">{{ ('%.3f' % p.medians[name]) if name in features else yes_no(p.medians[name]) }}</td></tr>
     {% endfor %}
-    <tr><td><i>Intercept</i></td><td class="num">{{ '%+.3f' % p.intercept }}</td><td></td><td></td></tr></table>
+    <tr><td><i>Typical account (every input at its median)</i></td><td class="num">{{ '%+.3f' % p.typical_logit }}</td>
+      <td class="num">{{ typical_p(p) | pct }} chance of loss</td></tr></table>
   </details>
 </div>
 {% endfor %}

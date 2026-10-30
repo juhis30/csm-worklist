@@ -54,6 +54,7 @@
 - **Business metrics, not just AUC.** I report the share of all lost ARR that sits in our top 20%: 58–74% for the model vs 33–41% for the rule.
 - **Gmail metadata only.** The system uses who, when, direction and bounces, never message content.
 - **Traceability.** Every number on an account page links to the model version, its inputs and the raw events behind it, including events that arrived too late to count.
+- **One definition of "typical", everywhere.** Typical means every input at its training median. The account page shows those medians, each contribution is measured from them (so a value at typical contributes exactly 0), and the calculation starts from the typical account's own score. Nothing is displayed against one reference and computed against another.
 - **Explanations never point at filled-in values.** When data was missing, the reason given is "no product data", not a made-up usage number.
 - **A regression test stops drafts from claiming usage data we don't have.**
 - **Honest uncertainty in the UI.** When there isn't enough held-out evidence that the model beats the rule, CSMs are told the ranking is only directional, and why.

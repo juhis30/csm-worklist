@@ -51,7 +51,7 @@ def test_crash_leaves_no_partial_week_and_retry_succeeds(world_db, monkeypatch):
 def test_stored_scores_recompute_from_model_and_contributions(world_db):
     params = {r[0]: json.loads(r[1]) for r in world_db.execute("SELECT model_id, params FROM model_versions")}
     for model_id, p, contrib in world_db.execute("SELECT model_id, p_lost, contributions FROM scores LIMIT 500"):
-        logit = params[model_id]["intercept"] + sum(json.loads(contrib).values())
+        logit = params[model_id]["typical_logit"] + sum(json.loads(contrib).values())
         assert math.isclose(1 / (1 + math.exp(-logit)), p, abs_tol=1e-9)
 
 

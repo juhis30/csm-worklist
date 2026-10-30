@@ -133,8 +133,10 @@ def write_scores(conn, tenant_id, run_id, as_of, model_id, scored):
 
 def strongest_driver(contributions: dict, features: dict):
     """(input name, source) of the input pushing risk up the most, skipping inputs that
-    were only filled in because data was missing: their effect is the "no data" input's."""
-    real = {k: v for k, v in contributions.items() if k in MISSING_GROUPS or features.get(k) is not None}
+    were only filled in because data was missing: their effect is the "no data" input's.
+    A "no data" input only counts when the data really is missing."""
+    real = {k: v for k, v in contributions.items()
+            if (features.get(k) if k in MISSING_GROUPS else features.get(k) is not None)}
     name, value = max(real.items(), key=lambda kv: kv[1])
     if value <= 0:
         return None, None
